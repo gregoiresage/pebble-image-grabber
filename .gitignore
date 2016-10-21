@@ -1,0 +1,4 @@
+.lock*
+build
+pebble_screen*
+node_modules

@@ -1,0 +1,36 @@
+{
+  "name": "pebble-image-grabber",
+  "author": "MakeAwesomeHappen",
+  "version": "1.0.0",
+  "files": [
+    "dist.zip"
+  ],
+  "keywords": [
+    "pebble-package"
+  ],
+  "dependencies": {
+    "omggif": "^1.0.8",
+    "pebble-events": "^1.2.0"
+  },
+  "pebble": {
+    "projectType": "package",
+    "sdkVersion": "3",
+    "targetPlatforms": [
+      "aplite",
+      "basalt",
+      "chalk",
+      "diorite",
+      "emery"
+    ],
+    "messageKeys": [
+      "PIG_URL",
+      "PIG_CHUNK_INDEX",
+      "PIG_CHUNK_DATA",
+      "PIG_IMAGE_SIZE",
+      "PIG_STATUS"      
+    ],
+    "resources": {
+      "media": []
+    }
+  }
+}
