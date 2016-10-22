@@ -5,22 +5,15 @@
 
 static EventHandle s_event_handle;
 
-static ImageGrabberStatus s_status;
-
 static ImageGrabberCallback *s_callback;
-
-static bool 		user_buffer 	= false;
-static uint8_t      *s_data_image 	= NULL;
-static uint32_t     data_size 		= 0;
 static uint16_t     chunk_size 		= 0;
-
-static bool         s_request_pending = false;
+static uint8_t      *s_data_image 	= NULL;
 
 static void inbox_received_handler(DictionaryIterator *iter, void *context) {
 
   Tuple *size_tuple = dict_find(iter, MESSAGE_KEY_PIG_IMAGE_SIZE);
   if(size_tuple) {
-	data_size = size_tuple->value->uint32;
+	int32_t data_size = size_tuple->value->uint32;
 	
 	if(s_data_image == NULL)
 		s_data_image = malloc(data_size);
@@ -31,31 +24,26 @@ static void inbox_received_handler(DictionaryIterator *iter, void *context) {
   Tuple *message_tuple 	= dict_find(iter, MESSAGE_KEY_PIG_STATUS);
   if (index_tuple && image_tuple && message_tuple) {
     int32_t index = index_tuple->value->int32;
-    int32_t status = message_tuple->value->int32;
+    ImageGrabberStatus status = message_tuple->value->int32;
 
-    // APP_LOG(APP_LOG_LEVEL_DEBUG, "image received index=%ld size=%d", index, image_tuple->length);
     memcpy(s_data_image + index,&image_tuple->value->uint8,image_tuple->length);
 
-    s_status = status;
-
     if(s_callback)
-      s_callback(s_data_image, data_size, s_status);
+      s_callback(s_data_image, index + image_tuple->length, status);
 
-    if(s_status == ImageGrabberDone){
+    if(status == ImageGrabberDone){
        s_data_image = NULL;
     }
   }
   else if(message_tuple){
-  	int32_t status = message_tuple->value->int32;
   	if(s_callback)
-      s_callback(s_data_image, data_size, s_status);
+      s_callback(s_data_image, 0, message_tuple->value->int32);
   }
 }
 
 static void fail_and_callback() {
-  s_status = ImageGrabberStatusFailed;
   if(s_callback)
-  	s_callback(s_data_image, 0, s_status);
+  	s_callback(s_data_image, 0, ImageGrabberStatusFailed);
 }
 
 static bool get(const char* url) {
@@ -75,17 +63,15 @@ static bool get(const char* url) {
     return false;
   }
 
-  s_status = ImageGrabberStatusPending;
   if(s_callback)
-  	s_callback(s_data_image, 0, s_status);
+  	s_callback(s_data_image, 0, ImageGrabberStatusPending);
   return true;
 }
 
 bool image_grabber_get(const char* url) {
   if(!bluetooth_connection_service_peek()) {
-    s_status = ImageGrabberStatusBluetoothDisconnected;
     if(s_callback)
-    	s_callback(s_data_image, 0, s_status);
+    	s_callback(s_data_image, 0, ImageGrabberStatusBluetoothDisconnected);
     return false;
   }
   return get(url);

@@ -198,6 +198,8 @@ var ImageGrabber = function() {
 	      {
 	      	"PIG_STATUS": ImageGrabberNotAnImage
 	      });
+
+		return null;
 	}
 
 	function _getImage(url, chunk_size){
@@ -212,7 +214,8 @@ var ImageGrabber = function() {
 		  console.log("Image size = "+ data.length + " bytes");
 
 		  var bitmap = _convert(data);
-		  _sendBitmap(bitmap, chunk_size);
+		  if(bitmap != null)
+		  	_sendBitmap(bitmap, chunk_size);
 		};
 
 		var xhrTimeout = setTimeout(function() {
