@@ -11,11 +11,17 @@ var MessageQueue= require('./js-message-queue.min.js');
 var ImageGrabber = function() {
 
 	var DOWNLOAD_TIMEOUT = 20000;
-	var CHUNK_SIZE = 6000;
 
-	function _sendBitmap(bitmap){
+	var ImageGrabberStatusBluetoothDisconnected = 0;
+	var ImageGrabberStatusPending = 1;
+	var ImageGrabberStatusFailed = 2;
+	var ImageGrabberDone = 3;
+	var ImageGrabberInternetTimeout = 4;
+	var ImageGrabberNotAnImage = 5;
+
+	function _sendBitmap(bitmap, chunk_size){
 	  var i = 0;
-	  var nextSize = bitmap.length-i > CHUNK_SIZE ? CHUNK_SIZE : bitmap.length-i;
+	  var nextSize = bitmap.length-i > chunk_size ? chunk_size : bitmap.length-i;
 	  var sliced = bitmap.slice(i, i + nextSize);
 
 	  var success = function(){
@@ -23,12 +29,13 @@ var ImageGrabber = function() {
 	    if(i>=bitmap.length)
 	      return;
 	    console.log(i + "/" + bitmap.length);
-	    nextSize = bitmap.length-i > CHUNK_SIZE ? CHUNK_SIZE : bitmap.length-i;
+	    nextSize = bitmap.length-i > chunk_size ? chunk_size : bitmap.length-i;
 	    sliced = bitmap.slice(i, i + nextSize);
 	    MessageQueue.sendAppMessage(
 	      {
 	      "PIG_CHUNK_INDEX":i,
-	      "PIG_CHUNK_DATA":sliced
+	      "PIG_CHUNK_DATA":sliced,
+	      "PIG_STATUS": nextSize==chunk_size ? ImageGrabberStatusPending : ImageGrabberDone
 	      },
 	      success,
 	      null
@@ -38,8 +45,9 @@ var ImageGrabber = function() {
 	  MessageQueue.sendAppMessage(
 	      {
 	      	"PIG_IMAGE_SIZE": bitmap.length,
-	      	"PIG_CHUNK_INDEX":i,
-	      	"PIG_CHUNK_DATA":sliced
+	      	"PIG_CHUNK_INDEX": i,
+	      	"PIG_CHUNK_DATA": sliced,
+	      	"PIG_STATUS": nextSize==chunk_size ? ImageGrabberStatusPending : ImageGrabberDone
 	      },
 	      success,
 	      null
@@ -185,9 +193,14 @@ var ImageGrabber = function() {
 			return _convertJpeg(data);
 
 		console.log("unknown format");
+
+		MessageQueue.sendAppMessage(
+	      {
+	      	"PIG_STATUS": ImageGrabberNotAnImage
+	      });
 	}
 
-	function _getImage(url){
+	function _getImage(url, chunk_size){
 
 		var xhr = new XMLHttpRequest();
 		xhr.open("GET", url, true);
@@ -199,20 +212,25 @@ var ImageGrabber = function() {
 		  console.log("Image size = "+ data.length + " bytes");
 
 		  var bitmap = _convert(data);
-		  _sendBitmap(bitmap);
+		  _sendBitmap(bitmap, chunk_size);
 		};
 
 		var xhrTimeout = setTimeout(function() {
 			console.log("Timeout");
+			MessageQueue.sendAppMessage(
+			{
+				"PIG_STATUS": ImageGrabberInternetTimeout
+			});
 		}, DOWNLOAD_TIMEOUT);
 
 		xhr.send(null);
 	}
 
 	Pebble.addEventListener('appmessage', function(e) {
-		if (e.payload.hasOwnProperty('PIG_URL')){
+		if (e.payload.hasOwnProperty('PIG_URL') && e.payload.hasOwnProperty('PIG_CHUNK_SIZE')){
 			var url = e.payload['PIG_URL'];
-			_getImage(url);
+			var chunk_size = e.payload['PIG_CHUNK_SIZE'];
+			_getImage(url, chunk_size);
 		}
 	});
 
