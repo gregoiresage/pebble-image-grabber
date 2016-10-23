@@ -25,6 +25,8 @@
     "messageKeys": [
       "PIG_URL",
       "PIG_CHUNK_SIZE",
+      "PIG_FINAL_WIDTH",
+      "PIG_FINAL_HEIGHT",
 
       "PIG_CHUNK_INDEX",
       "PIG_CHUNK_DATA",

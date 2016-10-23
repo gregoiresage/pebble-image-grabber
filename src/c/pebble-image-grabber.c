@@ -46,7 +46,7 @@ static void fail_and_callback() {
   	s_callback(s_data_image, 0, ImageGrabberStatusFailed);
 }
 
-static bool get(const char* url) {
+static bool get(const char* url, GSize size) {
   DictionaryIterator *out;
   AppMessageResult result = app_message_outbox_begin(&out);
   if(result != APP_MSG_OK) {
@@ -56,6 +56,8 @@ static bool get(const char* url) {
 
   dict_write_cstring(out, MESSAGE_KEY_PIG_URL, url);
   dict_write_uint16(out, MESSAGE_KEY_PIG_CHUNK_SIZE, chunk_size);
+  dict_write_uint16(out, MESSAGE_KEY_PIG_FINAL_WIDTH, size.w);
+  dict_write_uint16(out, MESSAGE_KEY_PIG_FINAL_HEIGHT, size.h);
 
   result = app_message_outbox_send();
   if(result != APP_MSG_OK) {
@@ -68,13 +70,13 @@ static bool get(const char* url) {
   return true;
 }
 
-bool image_grabber_get(const char* url) {
+bool image_grabber_get(const char* url, GSize size) {
   if(!bluetooth_connection_service_peek()) {
     if(s_callback)
     	s_callback(s_data_image, 0, ImageGrabberStatusBluetoothDisconnected);
     return false;
   }
-  return get(url);
+  return get(url, size);
 }
 
 void image_grabber_init(ImageGrabberSettings settings){

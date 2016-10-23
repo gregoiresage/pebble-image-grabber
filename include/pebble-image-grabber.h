@@ -16,7 +16,7 @@ typedef struct {
   ImageGrabberCallback* callback;
 } ImageGrabberSettings;
 
-bool image_grabber_get(const char* url);
+bool image_grabber_get(const char* url, GSize size);
 
 void image_grabber_init(ImageGrabberSettings settings);
 

@@ -21,21 +21,24 @@ var ImageGrabber = function() {
 
 	function _sendBitmap(bitmap, chunk_size){
 	  var i = 0;
-	  var nextSize = bitmap.length-i > chunk_size ? chunk_size : bitmap.length-i;
-	  var sliced = bitmap.slice(i, i + nextSize);
+	  var nextSize = bitmap.length > chunk_size ? chunk_size : bitmap.length;
+	  var sliced = bitmap.slice(0, nextSize);
+	  i += nextSize;
+	  console.log(i + "/" + bitmap.length);
 
 	  var success = function(){
-	  	i += nextSize;
-	    if(i>=bitmap.length)
+	  	if(i==bitmap.length)
 	      return;
-	    console.log(i + "/" + bitmap.length);
+	  	
 	    nextSize = bitmap.length-i > chunk_size ? chunk_size : bitmap.length-i;
 	    sliced = bitmap.slice(i, i + nextSize);
+	    i += nextSize;
+	    console.log(i + "/" + bitmap.length);
 	    MessageQueue.sendAppMessage(
 	      {
-	      "PIG_CHUNK_INDEX":i,
+	      "PIG_CHUNK_INDEX":i-nextSize,
 	      "PIG_CHUNK_DATA":sliced,
-	      "PIG_STATUS": nextSize==chunk_size ? ImageGrabberStatusPending : ImageGrabberDone
+	      "PIG_STATUS": i==bitmap.length ? ImageGrabberDone : ImageGrabberStatusPending 
 	      },
 	      success,
 	      null
@@ -45,16 +48,16 @@ var ImageGrabber = function() {
 	  MessageQueue.sendAppMessage(
 	      {
 	      	"PIG_IMAGE_SIZE": bitmap.length,
-	      	"PIG_CHUNK_INDEX": i,
+	      	"PIG_CHUNK_INDEX": i-nextSize,
 	      	"PIG_CHUNK_DATA": sliced,
-	      	"PIG_STATUS": nextSize==chunk_size ? ImageGrabberStatusPending : ImageGrabberDone
+	      	"PIG_STATUS": i==bitmap.length ? ImageGrabberDone : ImageGrabberStatusPending
 	      },
 	      success,
 	      null
 	      );
 	}
 
-	function _convertImage(rgbaPixels, numComponents, width, height){
+	function _convertImage(rgbaPixels, numComponents, width, height, final_width, final_height){
 
 	  var watch_info;
 	  if(Pebble.getActiveWatchInfo) {
@@ -63,19 +66,19 @@ var ImageGrabber = function() {
 	    watch_info = { 'platform' : 'aplite'};
 	  }
 	
-	  var ratio = Math.min(144 / width,168 / height);
+	  var ratio = Math.min(final_width/width, final_height/height);
 	  var ratio = Math.min(ratio,1);
 	
-	  var final_width = Math.floor(width * ratio);
-	  var final_height = Math.floor(height * ratio);
+	  final_width 	= Math.floor(final_width * ratio);
+	  final_height 	= Math.floor(final_height * ratio);
 	  var final_pixels = [];
 	  var bitmap = [];
 	
-	  if(watch_info.platform === 'aplite') {
+	  if(watch_info.platform === 'aplite' || watch_info.platform === 'diorite') {
 	    var grey_pixels = image_tools.greyScale(rgbaPixels, width, height, numComponents);
 	    image_tools.ScaleRect(final_pixels, grey_pixels, width, height, final_width, final_height, 1);
 	    dithering.floydSteinberg(final_pixels, final_width, final_height, dithering.pebble_nearest_color_to_black_white);
-	    bitmap = toPBI(final_pixels, final_width, final_height);
+	    bitmap = image_tools.toPBI(final_pixels, final_width, final_height);
 	  }
 	  else {
 	    image_tools.ScaleRect(final_pixels, rgbaPixels, width, height, final_width, final_height, numComponents);
@@ -89,23 +92,23 @@ var ImageGrabber = function() {
 	  return bitmap;
 	}
 
-	function _convertPbi(data){
-		var bitmap = [];
-		for(var i=0; i<data.byteLength; i++) {
-		  bitmap.push(data[i]);
-		}
-		return bitmap;
-	}
+	// function _convertPbi(data){
+	// 	var bitmap = [];
+	// 	for(var i=0; i<data.byteLength; i++) {
+	// 	  bitmap.push(data[i]);
+	// 	}
+	// 	return bitmap;
+	// }
 
-	function _convertJpeg(data){
+	function _convertJpeg(data, final_width, final_height){
 		console.log("convert JPEG");
 		var j = new JpegImage();
 		j.parse(data);
 		var pixels = j.getData(j.width, j.height);
-		return _convertImage(pixels, 3, j.width, j.height);
+		return _convertImage(pixels, 3, j.width, j.height, final_width, final_height);
 	}
 
-	function _isJpeg(data){
+	function _isJpeg(data, final_width, final_height){
 		var jpeg_sig = [0xFF,0xD8,0xFF];
 		var isjpeg = true;
 		for(var i=0; i<jpeg_sig.length && isjpeg; i++){
@@ -114,7 +117,7 @@ var ImageGrabber = function() {
 		return isjpeg;
 	}
 
-	function _convertGif(data){
+	function _convertGif(data, final_width, final_height){
 		console.log("convert GIF");
 		var gr = new omggif.GifReader(data);
 		console.log("Gif size : "+ gr.width  +" " + gr.height);
@@ -122,7 +125,7 @@ var ImageGrabber = function() {
 		var pixels = [];
 		gr.decodeAndBlitFrameRGBA(0, pixels);
 		
-		return _convertImage(pixels, 4, gr.width, gr.height);
+		return _convertImage(pixels, 4, gr.width, gr.height, final_width, final_height);
 	}
 
 	function _isGif87a(data){
@@ -147,7 +150,7 @@ var ImageGrabber = function() {
 		return _isGif87a(data) || _isGif89a(data);
 	}
 
-	function _convertPng(data){
+	function _convertPng(data, final_width, final_height){
 		console.log("convert PNG");
 		var png     = new PNG(data);
 		var width   = png.width;
@@ -163,11 +166,11 @@ var ImageGrabber = function() {
 		    png_arr.push(palette[3*pixels[i]+1] & 0xFF);
 		    png_arr.push(palette[3*pixels[i]+2] & 0xFF);
 		  }
-		  return _convertImage(png_arr, 3, width, height);
+		  return _convertImage(png_arr, 3, width, height, final_width, final_height);
 		}
 		else {
 		  var components = pixels.length /( width*height);
-		  return _convertImage(pixels, components, width, height);
+		  return _convertImage(pixels, components, width, height, final_width, final_height);
 		}
 	}
 
@@ -180,17 +183,17 @@ var ImageGrabber = function() {
 		return ispng;
 	}
 
-	function _convert(data){
+	function _convert(data, final_width, final_height){
 		console.log("convert");
 
 		if(_isPng(data))
-			return _convertPng(data);
+			return _convertPng(data, final_width, final_height);
 
 		if(_isGif(data))
-			return _convertGif(data);
+			return _convertGif(data, final_width, final_height);
 
 		if(_isJpeg(data))
-			return _convertJpeg(data);
+			return _convertJpeg(data, final_width, final_height);
 
 		console.log("unknown format");
 
@@ -202,7 +205,7 @@ var ImageGrabber = function() {
 		return null;
 	}
 
-	function _getImage(url, chunk_size){
+	function _getImage(url, chunk_size, final_width, final_height){
 
 		var xhr = new XMLHttpRequest();
 		xhr.open("GET", url, true);
@@ -213,7 +216,7 @@ var ImageGrabber = function() {
 		  var data = new Uint8Array(xhr.response || xhr.mozResponseArrayBuffer);
 		  console.log("Image size = "+ data.length + " bytes");
 
-		  var bitmap = _convert(data);
+		  var bitmap = _convert(data, final_width, final_height);
 		  if(bitmap != null)
 		  	_sendBitmap(bitmap, chunk_size);
 		};
@@ -233,7 +236,9 @@ var ImageGrabber = function() {
 		if (e.payload.hasOwnProperty('PIG_URL') && e.payload.hasOwnProperty('PIG_CHUNK_SIZE')){
 			var url = e.payload['PIG_URL'];
 			var chunk_size = e.payload['PIG_CHUNK_SIZE'];
-			_getImage(url, chunk_size);
+			var width = e.payload['PIG_FINAL_WIDTH'];
+			var height = e.payload['PIG_FINAL_HEIGHT'];
+			_getImage(url, chunk_size, width, height);
 		}
 	});
 
